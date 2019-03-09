@@ -1,0 +1,11 @@
+#!/usr/bin/env perl
+
+use Modern::Perl qw/2016/;
+use Path::Tiny;
+use FindBin;
+use lib "${FindBin::Bin}/../lib";
+use File::Index;
+
+my $index=File::Index->new;
+
+$index->index(@ARGV);
