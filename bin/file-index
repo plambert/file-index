@@ -1,0 +1,49 @@
+#!/usr/bin/env perl
+
+use Modern::Perl qw/2014/;
+use FindBin;
+use Path::Tiny;
+
+my @opts;
+my $cmd;
+my $basename=path($0)->basename;
+
+sub find_binary {
+  my $program=shift;
+  my @search=map { path $_ } ( $FindBin::Bin, split /:/, $ENV{PATH} );
+  my $found;
+  for my $dir (@search) {
+    my $binary=$dir->child($program);
+    if (-x $binary and -f $binary) {
+      $found=$binary;
+      last;
+    }
+  }
+  return $found;
+}
+
+while(@ARGV) {
+  my $opt=shift @ARGV;
+  if ($opt =~ m{^-}) {
+    push @opts, $opt;
+  }
+  else {
+    $cmd=$opt;
+    push @opts, @ARGV;
+    last;
+  }
+}
+
+die sprintf "%s: expected a command\n", $basename unless defined $cmd;
+
+if ($cmd eq 'help') {
+  my $program=find_binary sprintf "%s-%s", $basename, shift @ARGV;
+  die sprintf "%s: %s: unknown command\n", $basename, $program unless defined $program;
+  exec 'perldoc', $program->realpath;
+}
+
+my $program=find_binary sprintf "%s-%s", $basename, $cmd;
+
+die sprintf "%s: %s: unknown command\n", $basename, $cmd unless defined $program;
+
+exec $program, @opts;
