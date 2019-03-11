@@ -13,13 +13,13 @@ use Carp;
 our $DEFAULT_DBI_OPTIONS={ RaiseError => 1, AutoCommit => 1 };
 our $TABLES={
   entry => {
-    hostname    => { index => 'TEXT' },
-    abspath     => { unique => 'TEXT' },
-    name        => { index => 'TEXT' },
-    suffix      => { index => 'TEXT' },
-    type        => { index => 'TEXT' },
-    crc32       => { unique => 'TEXT' },
-    sha256      => { unique => 'TEXT' },
+    volume_id   => { index  => 'INTEGER' },
+    abspath     => { unique => 'TEXT'    },
+    name        => { index  => 'TEXT'    },
+    suffix      => { index  => 'TEXT'    },
+    type        => { index  => 'TEXT'    },
+    crc32       => { unique => 'TEXT'    },
+    sha256      => { unique => 'TEXT'    },
     dev         => 'INTEGER',
     ino         => 'INTEGER',
     mode        => 'INTEGER',
@@ -33,22 +33,39 @@ our $TABLES={
     ctime       => 'INTEGER',
     blksize     => 'INTEGER',
     blocks      => 'INTEGER',
+
     _indices    => [
       {
-        columns => [ 'hostname', 'abspath' ],
-        unique => 1,
+        columns => [ 'volume_id', 'abspath' ],
+        unique  => 1,
       },
     ],
   },
+
   symlink => {
-    hostname    => { index => 'TEXT' },
+    volume_id   => { index => 'INTEGER' },
     abspath     => { index => 'TEXT' },
     link_target => { index => 'TEXT' },
+
     _indices    => [
       {
-        columns => [ 'hostname', 'abspath' ],
-        unique => 1,
+        columns => [ 'volume_id', 'abspath' ],
+        unique  => 1,
       },
+    ],
+  },
+
+  volume => {
+    id          => 'INTEGER PRIMARY KEY',
+    hostname    => { index => 'TEXT' },
+    root        => { index => 'TEXT' },
+    is_shared   => { index => 'INTEGER' },
+
+    _indices    => [
+      {
+        columns => [ 'hostname', 'root' ],
+        unique  => 1,
+      }
     ],
   },
 };

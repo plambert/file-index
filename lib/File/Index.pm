@@ -94,7 +94,7 @@ sub index {
       stat => $stat,
     };
     if ($ENV{FILE_INDEX_CHECKSUM} and -f $entry) {
-      $self->add_checksums($data);
+      _add_checksums($data);
     }
     $self->insert('entry', $data);
     if (S_ISDIR($stat->mode)) {
@@ -103,8 +103,7 @@ sub index {
   }
 }
 
-sub add_checksums {
-  my $self=shift;
+sub _add_checksums {
   my $data=shift;
   my @checksums=(
     [ 'crc32', Digest::CRC->new(type => 'crc32') ],

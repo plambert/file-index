@@ -5,6 +5,7 @@ use List::Util qw/any/;
 use Scalar::Util qw/looks_like_number/;
 use Carp;
 use File::stat ();
+use Sys::Hostname;
 
 our @STATS=map { s{^\$st_}{}r } @File::stat::fields;
 our $FILETYPE={
@@ -34,8 +35,27 @@ around BUILDARGS => sub {
     }
     delete $opts->{stat};
   }
+  if (not $opts->{volume_id}) {
+    if ($opts->{root}) {
+      my $h=exists $opts->{hostname} ? delete $opts->{hostname} : hostname;
+      my $r=delete $opts->{root};
+      my $volume_id=_get_volume($opts->{index}, $h, $r);
+      croak "could not find volume" unless defined $volume_id;
+      $opts->{volume_id} = $volume_id;
+    }
+  }
   return $opts;
 };
+
+sub _get_volume {
+  my $dbh=shift;
+  my $hostname=shift;
+  my $root=shift;
+  my $sth=$dbh->prepare_cached('SELECT id FROM volume WHERE hostname == ? AND root == ?;');
+  my ($id)=$sth->selectrow_array($sth, $hostname, $root) or croak $dbh->errstr;
+  croak sprintf "hostname '%s', root '%s' not found in volume table", $hostname, $root unless defined $id;
+  return $id;
+}
 
 has index => (
   is => 'ro',
@@ -56,9 +76,9 @@ sub _build_type {
   return $FILETYPE->{$mode};
 }
 
-has hostname => (
+has volume_id => (
   is => "ro",
-  isa => sub { m{^[a-z0-9\.-]+$} or croak "$_: expected a hostname" },
+  isa => sub { looks_like_number $_ or croak "$_: expected a hostname" },
   required => 1
 );
 has abspath  => (
@@ -94,4 +114,16 @@ sub _build_suffix {
   return $suffix;
 }
 
+sub db_insert {
+  my $self=shift;
+  my $table=shift // 'entry';
+  my $fields=$self->_db_fields;
+  $self->index->insert($table, $fields);
+}
+
+sub _db_fields {
+  my $self=shift;
+  my $data;
+  for my $key (@STATS, qw{})
+}
 1;
