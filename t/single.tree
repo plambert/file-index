@@ -1,6 +1,0 @@
-{
-  "name": "single-file",
-  "content": {
-    "file01.txt": "contents of file01.txt"
-  }
-}
