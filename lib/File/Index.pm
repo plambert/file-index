@@ -2,6 +2,21 @@ package File::Index;
 
 use Moo;
 use Path::Tiny;
+use DBI;
+# use File::Index::Regular;
+
+##### private data #####
+
+our $statements={
+  get_entry_id_by_path_and_name => 'SELECT id FROM entries WHERE path=? AND name=?;',
+  get_entry_by_path_and_name => 'SELECT * FROM entries WHERE path=? AND name=?;',
+  get_entry_by_id => 'SELECT * FROM entries WHERE id=?;',
+  insert_entry => 'INSERT INTO entries (name, path, mode, size, mtime) VALUES (?, ?, ?, ?, ?);',
+  delete_entry_by_path_and_name => 'DELETE FROM entries WHERE path=? AND name=?;',
+  delete_entry_by_id => 'DELETE FROM entries WHERE id=?;',
+  update_entry_by_path_and_name => 'UPDATE entries SET mode=?, size=?, mtime=? WHERE path=? AND name=?;',
+  update_entry_by_id => 'UPDATE entries SET mode=?, size=?, mtime=? WHERE id=?;',
+};
 
 ##### public attributes #####
 
@@ -88,12 +103,20 @@ sub all_by_name {
 sub _add_or_update_entry {
   my $self=shift;
   my $entry=shift;
-  my $id;
   my $is_new;
   my $dbh=$self->dbh;
   my $insert=$self->_statement_cache->{insert_entry};
+  my $update=$self->_statement_cache->{update_entry_by_id};
+  my $find=$self->_statement_cache->{get_entry_id_by_path_and_name};
   # name, path, mode, size, mtime
-  my $result=$dbh->execute($insert, {}, $entry->{name}, $entry->{path}, $entry->{mode}, $entry->{size}, $entry->{mtime});
+  my ($id)=$dbh->execute($find, {}, $entry->{path}, $entry->{name});
+  if (defined $id) {
+    $dbh->execute($update, {}, map { $entry->{$_} // undef } qw{mode size mtime id});
+  }
+  else {
+    my $result=$dbh->execute($insert, {}, $entry->{name}, $entry->{path}, $entry->{mode}, $entry->{size}, $entry->{mtime});
+
+  }
 }
 
 # create database tables if they don't exist
@@ -155,8 +178,9 @@ sub _build__statement_cache {
   my $self=shift;
   my $dbh=$self->dbh;
   my $cache={};
-  $cache->{insert_entry}=$dbh->prepare('INSERT OR REPLACE INTO entries (name, path, mode, size, mtime) VALUES (?, ?, ?, ?, ?);');
-  $cache->{insert_}
+  for my $key (keys %$statements) {
+    $cache->{$key}=$dbh->prepare($statements->{$key});
+  }
   return $cache;
 }
 
