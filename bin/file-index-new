@@ -6,151 +6,51 @@ use FindBin;
 use lib "${FindBin::Bin}/../lib";
 use Regexp::Grammars;
 use JSON::MaybeXS;
-# use File::Index;
+use File::Index::Schema;
+use DBI;
 
-my $dbfile=path '~/.file-index/default.sqlite3';
-# my @schema=map { my $x=$_; $x=~s{\s\s+|\s*\n\s*}{ }g; "$x;" } split /;(?:[ \t]*\n)+(?=\S)/, do { local $/; <DATA> };
-my $schema=do { local $/; <DATA> };
-my %ESC=('n' => "\n", 'r' => "\r", 't' => "\t");
-my $parser=qr{<debug: match>
-  \A (?: <[TableDefinition]>+ ) <.ws> \z
+my $dbdir=path '~/.file-index';
+my $dbfile=path $dbdir, 'default.sqlite3';
 
-  <rule: TableDefinition>
-    table <TableName=Identifier> \{ (<[ColumnDefinition]> | <[IndexDefinition]> )++ \}
-
-  <rule: ColumnDefinition>
-    <ColumnName=Identifier> <ColumnType> <ColumnIndexDefinition>?
-
-  <rule: IndexDefinition>
-    \( <[Identifier]> % <Comma> \)
-
-  <rule: ColumnIndexDefinition>
-    <ColumnIsIndexed> | <ColumnIsUnique>
-
-  <rule: Identifier>
-    <BareWord>
-  | <QuotedString>
-
-  <token: QuotedString> " <[QuotedStringElement]>* "
-    <MATCH=(?{ join '', @{$MATCH{QuotedStringElement}} })>
-
-  <token: QuotedStringElement> <MATCH=QuotedLiteral> | <MATCH=QuotedChar> | <MATCH=QuotedEscape>
-
-  <token: QuotedLiteral> [^\\"]++
-
-  <token: QuotedChar> \\ u ([a-f0-9]{4}|[a-f0-9]{2})
-    <MATCH=(?{ chr(hex($CONTEXT)) })>
-
-  <token: QuotedEscape> \\(.)
-    <MATCH=(?{ $ESC{$CONTEXT} // $CONTEXT })>
-
-  <token: BareWord> [a-z][a-z0-9_]*+
-
-  <token: ColumnType> integer | text
-
-  <token: ColumnIsIndexed> index(?:ed)?
-
-  <token: ColumnIsUnique> unique
-
-  <token: Comma> ,
-
-  <token: ws> (?:\s+|\s*\#.*\n)*+
-
-}ix;
-
-sub create_sql {
-  my $text=shift;
-  if ($text =~ $parser) {
-    print JSON->new->canonical->pretty->allow_nonref->allow_blessed->convert_blessed->encode(\%/);
-    exit 0;
+while(@ARGV) {
+  my $opt=shift @ARGV;
+  if ($opt eq '-f' or $opt eq '--file') {
+    my $file=shift @ARGV;
+    die sprintf "%s: %s: requires argument\n", path($0)->basename, $opt unless defined $file and length $file;
+    $file .= '.sqlite3' unless $file =~ m{\.sqlite3$};
+    $dbfile=path($file)->absolute;
+  }
+  elsif ($opt eq '-n' or $opt eq '--name') {
+    my $file=shift @ARGV;
+    die sprintf "%s: %s: requires file name\n", path($0)->basename, $opt unless defined $file and length $file and $file !~ m{/};
+    $file .= '.sqlite3' unless $file =~ m{\.sqlite3$};
+    $dbfile=path($dbdir, $file);
+  }
+  elsif ($opt =~ m{^-}) {
+    die sprintf "%s: %s: unknown option\n", path($0)->basename, $opt;
   }
   else {
-    exit 1;
+    $dbfile=path $opt;
   }
 }
 
-# while(@ARGV) {
-#   my $opt=shift @ARGV;
-#   if ($opt eq '-f' or $opt eq '--file' or $opt eq '--') {
-#     $dbfile=path shift @ARGV;
-#   }
-#   elsif ($opt =~ m{^-}) {
-#     die sprintf "%s: %s: unknown option\n", path($0)->basename, $opt;
-#   }
-#   else {
-#     $dbfile=path $opt;
-#   }
-# }
+my @sql=File::Index::Schema->db_init_sql;
 
-# print JSON->new->allow_nonref->encode($schema);
-create_sql $schema;
+$dbfile->parent->mkpath unless -d $dbfile->parent;
 
-# use JSON::MaybeXS;
-# print JSON->new->canonical->allow_nonref->pretty->encode($_) for @schema;
-
-__DATA__
-table volume {
-  "hostname"    TEXT       indexed
-  root          TEXT       indexed
-  is_shared     INTEGER    indexed
+if (-f $dbfile) {
+  my $copy=$dbfile->sibling($dbfile->basename . ".old");
+  $copy->remove if -f $copy;
+  $dbfile->move($copy);
 }
-# CREATE TABLE IF NOT EXISTS volume (
-#   id INTEGER PRIMARY KEY,
-#   hostname TEXT,
-#   root TEXT,
-#   is_shared INTEGER
-# );
 
-# CREATE INDEX IF NOT EXISTS idx_volume_hostname ON volume (hostname);
-# CREATE INDEX IF NOT EXISTS idx_volume_root ON volume (root);
-# CREATE INDEX IF NOT EXISTS idx_volume_is_shared ON volume (is_shared);
-# CREATE UNIQUE INDEX IF NOT EXISTS idx_volume_hostname_root ON volume (hostname, root);
+my $dbh=DBI->connect(sprintf("dbi:SQLite:dbname=%s", $dbfile), undef, undef, { AutoCommit => 1, RaiseError => 1});
 
-# CREATE TABLE IF NOT EXISTS entry (
-#   id              INTEGER PRIMARY KEY,
-#   volume_id       INTEGER,
-#   abspath         TEXT,
-#   name            TEXT,
-#   suffix          TEXT,
-#   filetype        TEXT,
-#   crc32           TEXT,
-#   sha256          TEXT,
-#   dev             INTEGER,
-#   ino             INTEGER,
-#   mode            INTEGER,
-#   nlink           INTEGER,
-#   uid             INTEGER,
-#   gid             INTEGER,
-#   rdev            INTEGER,
-#   size            INTEGER,
-#   atime           INTEGER,
-#   mtime           INTEGER,
-#   ctime           INTEGER,
-#   blksize         INTEGER,
-#   blocks          INTEGER
-# );
+for my $sql (@sql) {
+  print $sql;
+  $dbh->do($sql);
+}
 
-# CREATE INDEX IF NOT EXISTS idx_entry_volume_id ON entry (volume_id);
-# CREATE INDEX IF NOT EXISTS idx_entry_abspath ON entry (abspath);
-# CREATE INDEX IF NOT EXISTS idx_entry_name ON entry (name);
-# CREATE INDEX IF NOT EXISTS idx_entry_suffix ON entry (suffix);
-# CREATE INDEX IF NOT EXISTS idx_entry_filetype ON entry (filetype);
-# CREATE INDEX IF NOT EXISTS idx_entry_crc32 ON entry (crc32);
-# CREATE INDEX IF NOT EXISTS idx_entry_sha256 ON entry (sha256);
-# CREATE INDEX IF NOT EXISTS idx_entry_uid ON entry (uid);
-# CREATE INDEX IF NOT EXISTS idx_entry_gid ON entry (gid);
-# CREATE INDEX IF NOT EXISTS idx_entry_size ON entry (size);
-# CREATE INDEX IF NOT EXISTS idx_entry_mtime ON entry (mtime);
-# CREATE UNIQUE INDEX IF NOT EXISTS idx_entry_volume_abspath ON entry (
-#   volume_id,
-#   abspath
-# );
-
-# CREATE TABLE IF NOT EXISTS symlink (
-#   id INTEGER PRIMARY KEY,
-#   entry_id INTEGER,
-#   target TEXT
-# );
-
-# CREATE UNIQUE INDEX IF NOT EXISTS idx_symlink_entry_id ON symlink (entry_id);
-# CREATE INDEX IF NOT EXISTS idx_symlink_target ON symlink (target);
+sub schema {
+  return ;
+}

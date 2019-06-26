@@ -1,0 +1,10 @@
+#!/usr/bin/env perl
+
+use Modern::Perl qw/2014/;
+use FindBin;
+use Path::Tiny;
+use lib "${FindBin::Bin}/../lib";
+use DBI;
+
+my @queue;
+my $checksum_max_size;
