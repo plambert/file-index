@@ -8,21 +8,24 @@ use Path::Tiny;
 use lib './lib';
 use File::Index::Types qw/-all/;
 use Fcntl ':mode';
-use Moo::Role;
+use Moo;
 
 with 'File::Index::Role::DBObject';
+with 'File::Index::PermissionSymbols';
 
-our @COLUMNS;
+our @COLUMNS=qw{
+  id filename filepath mode mtime index_time
+};
 
 has id => (
   is => 'ro',
-  isa => IntegerNotNull,
+  isa => IntegerPrimaryKey,
 );
-has name => (
+has filename => (
   is => 'ro',
   required => 1,
 );
-has path => (
+has filepath => (
   is => 'ro',
   isa => AbsPath,
   coerce => 1,
@@ -47,7 +50,7 @@ has index_time => (
 
 sub fullpath {
   my $self=shift;
-  return path $self->{path}, $self->{name};
+  return path $self->filepath, $self->filename;
 }
 
 # generate a '-rwxr-xr-x' or 'drwxr-xr-x' type string
@@ -185,34 +188,62 @@ sub _build_perms {
 }
 
 # public class method
-sub new_from_object {
+sub new_from_hash {
   my $class=shift;
   my $obj=shift;
-  if ($obj->{mode} & S_IFDIR) {
-    return File::Index::Directory->new($obj);
-  }
-  elsif ($obj->{mode} & S_IFREG) {
-    return File::Index::Regular->new($obj);
-  }
-  elsif ($obj->{mode} & S_IFSOCK) {
-    return File::Index::Socket->new($obj);
-  }
-  elsif ($obj->{mode} & S_IFLNK) {
-    return File::Index::Symlink->new($obj);
-  }
-  elsif ($obj->{mode} & S_IFBLK) {
-    return File::Index::Block->new($obj);
-  }
-  elsif ($obj->{mode} & S_IFCHR) {
-    return File::Index::Character->new($obj);
-  }
-  elsif ($obj->{mode} & S_IFIFO) {
-    return File::Index::NamedPIpe->new($obj);
-  }
-  else {
-    die sprintf "%s: %04o: unrecognized file type!\n", path($0)->basename, $obj->{mode} & S_IFMT;
-  }
+  return File::Index::Entry->new($obj);
+  # if ($obj->{mode} & S_IFDIR) {
+  #   return File::Index::Directory->new($obj);
+  # }
+  # elsif ($obj->{mode} & S_IFREG) {
+  #   return File::Index::Regular->new($obj);
+  # }
+  # elsif ($obj->{mode} & S_IFSOCK) {
+  #   return File::Index::Socket->new($obj);
+  # }
+  # elsif ($obj->{mode} & S_IFLNK) {
+  #   return File::Index::Symlink->new($obj);
+  # }
+  # elsif ($obj->{mode} & S_IFBLK) {
+  #   return File::Index::Block->new($obj);
+  # }
+  # elsif ($obj->{mode} & S_IFCHR) {
+  #   return File::Index::Character->new($obj);
+  # }
+  # elsif ($obj->{mode} & S_IFIFO) {
+  #   return File::Index::NamedPipe->new($obj);
+  # }
+  # else {
+  #   die sprintf "%s: %04o: unrecognized file type!\n", path($0)->basename, $obj->{mode} & S_IFMT;
+  # }
 }
 
 1;
 
+__DATA__
+
+                S_IRWXU S_IRUSR S_IWUSR S_IXUSR
+                S_IRWXG S_IRGRP S_IWGRP S_IXGRP
+                S_IRWXO S_IROTH S_IWOTH S_IXOTH
+
+                # Setuid/Setgid/Stickiness/SaveText.
+                # Note that the exact meaning of these is system-dependent.
+
+                S_ISUID S_ISGID S_ISVTX S_ISTXT
+
+
+my @rwx=(
+  ($mode & S_IRWXU) >> 6,
+  ($mode & S_IRWXG) >> 3,
+  ($mode & S_IRWXO)     ,
+);
+my $symbolic=join '', type_char($mode), _rwx @rwx;
+
+sub _rwx {
+  my $mode=shift;
+  my $u = ($mode & S_IRWXU) >> 6;
+  my $g = ($mode & S_IRWXG) >> 3;
+  my $o = ($mode & S_IRWXO);
+  state $symbols="-----x-w--wxr--r-xrw-rwx";
+  return substr($symbols, $u*3, 3) . substr($symbols, $g*3, 3) . substr($symbols, $o*3, 3);
+}
