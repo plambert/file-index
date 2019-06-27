@@ -5,6 +5,7 @@ use strict;
 use warnings;
 use DBI;
 use Moo::Role;
+use Carp;
 
 our @COLUMNS;
 
@@ -30,6 +31,19 @@ sub _from_key_value {
   my $class=shift;
   my $obj=shift;
   return __PACKAGE__->new($obj);
+}
+
+has _statement_cache => ( is => 'ro', default => sub { {} } );
+
+for my $method (qw{ selectrow_hashref selectall_array }) {
+  ## no critic
+  eval sprintf 'sub %s {
+    my $self=shift;
+    my $name=shift;
+    my $sth=$self->_statement_cache->{$name} or croak "${name}: unknown SQL statement name";
+    my $opts=(@_ and "HASH" eq ref $_[0]) ? shift @_ : {};
+    return $self->dbh->%s($sth, $opts, @_);
+  } ', $method, $method;
 }
 
 1;

@@ -1,20 +1,24 @@
 package File::Index;
 
-use Moo;
+use strict;
+use warnings;
 use Path::Tiny;
 use DBI;
+use JSON::MaybeXS;
+use File::Index::Entry;
 # use File::Index::Regular;
+use Moo;
 
 ##### private data #####
 
 our $statements={
-  get_entry_id_by_path_and_name => 'SELECT id FROM entries WHERE path=? AND name=?;',
-  get_entry_by_path_and_name => 'SELECT * FROM entries WHERE path=? AND name=?;',
+  get_entry_id_by_path_and_name => 'SELECT id FROM entries WHERE filepath=? AND filename=?;',
+  get_entry_by_path_and_name => 'SELECT * FROM entries WHERE filepath=? AND filename=?;',
   get_entry_by_id => 'SELECT * FROM entries WHERE id=?;',
-  insert_entry => 'INSERT INTO entries (name, path, mode, size, mtime) VALUES (?, ?, ?, ?, ?);',
-  delete_entry_by_path_and_name => 'DELETE FROM entries WHERE path=? AND name=?;',
+  insert_entry => 'INSERT INTO entries (filename, filepath, mode, size, mtime) VALUES (?, ?, ?, ?, ?);',
+  delete_entry_by_path_and_name => 'DELETE FROM entries WHERE filepath=? AND filename=?;',
   delete_entry_by_id => 'DELETE FROM entries WHERE id=?;',
-  update_entry_by_path_and_name => 'UPDATE entries SET mode=?, size=?, mtime=? WHERE path=? AND name=?;',
+  update_entry_by_path_and_name => 'UPDATE entries SET mode=?, size=?, mtime=? WHERE filepath=? AND filename=?;',
   update_entry_by_id => 'UPDATE entries SET mode=?, size=?, mtime=? WHERE id=?;',
 };
 
@@ -47,8 +51,8 @@ sub index {
     my $absolute_target=$target->realpath;
     if (-d $absolute_target or -f $absolute_target) {
       my ($id, $is_new) = $self->_add_or_update_entry({
-        path  => $absolute_target->parent,
-        name  => $absolute_target->basename,
+        filepath  => $absolute_target->parent,
+        filename  => $absolute_target->basename,
         mode  => $stat->mode,
         size  => $stat->size,
         mtime => $stat->mtime,
@@ -64,22 +68,27 @@ sub index {
   return({ count => $count_all, added => $count_new });
 }
 
+BEGIN {
+  *add = \&index;
+  *add_or_update = \&index;
+}
+
 sub by_id {
   my $self=shift;
   my $id=shift;
   my $dbh=$self->dbh;
   my $select=$self->_select_by_id;
   my $result=$dbh->selectrow_hashref($select, {}, $id);
-  return $result;
+  return File::Index::Entry->new_from_hash($result);
 }
 
 sub by_path {
   my $self=shift;
   my $path=path(shift)->realpath;
   my $dbh=$self->dbh;
-  my $select=$self->_select_by_name;
+  my $select=$self->_statement_cache->{get_entry_by_path_and_name};
   my $result=$dbh->selectrow_hashref($select, {}, $path->parent, $path->basename);
-  return $result;
+  return File::Index::Entry->new_from_hash($result);
 }
 
 sub all_by_name {
@@ -95,6 +104,7 @@ sub all_by_name {
     my ($count) = $dbh->selectall_array($count, {}, $path->parent, $path->basename);
   }
 }
+
 ##### internal methods #####
 
 # add an entry to the database, or update it if it's already tehre
@@ -108,14 +118,18 @@ sub _add_or_update_entry {
   my $insert=$self->_statement_cache->{insert_entry};
   my $update=$self->_statement_cache->{update_entry_by_id};
   my $find=$self->_statement_cache->{get_entry_id_by_path_and_name};
-  # name, path, mode, size, mtime
-  my ($id)=$dbh->execute($find, {}, $entry->{path}, $entry->{name});
-  if (defined $id) {
-    $dbh->execute($update, {}, map { $entry->{$_} // undef } qw{mode size mtime id});
+  # filename, filepath, mode, size, mtime
+  my ($id, @x)=$find->execute($entry->{filepath}, $entry->{filename});
+  # printf STDERR "=== %s\n", JSON->new->canonical->allow_blessed->convert_blessed->allow_nonref->encode([ $id, @x ]);
+  if ($id and $id > 0) {
+    printf STDERR "=== %d --> %s\n", $id, JSON->new->canonical->allow_blessed->convert_blessed->allow_nonref->encode($entry);
+    $update->execute(map { $entry->{$_} // undef } qw{mode size mtime id});
+    return $id, 1;
   }
   else {
-    my $result=$dbh->execute($insert, {}, $entry->{name}, $entry->{path}, $entry->{mode}, $entry->{size}, $entry->{mtime});
-
+    my $result=$insert->execute($entry->{filename}, $entry->{filepath}, $entry->{mode}, $entry->{size}, $entry->{mtime});
+    # printf STDERR "+++ %d --> %s\n", $dbh->last_insert_id, JSON->new->canonical->allow_blessed->convert_blessed->allow_nonref->encode($entry);
+    return $result, defined $id;
   }
 }
 
@@ -153,8 +167,8 @@ sub _build_schema {
 
       CREATE TABLE IF NOT EXISTS entries (
         id          INTEGER PRIMARY KEY,
-        name        VARCHAR(255) NOT NULL,
-        path        VARCHAR(1023) NOT NULL,
+        filename    VARCHAR(255) NOT NULL,
+        filepath    VARCHAR(1023) NOT NULL,
         mode        INTEGER NOT NULL,
         size        INTEGER NOT NULL,
         mtime       INTEGER NOT NULL,
