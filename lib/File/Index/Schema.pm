@@ -146,7 +146,7 @@ sub _to_sql {
       if (defined $def->{index}) {
         my $index_type=$def->{type} eq 'unique' ? 'UNIQUE INDEX' : 'INDEX';
         my $index_name=sprintf "idx_%s_%s", $table, $def->{name};
-        push @indices, sprintf "CREATE %s IF NOT EXISTS %s ON %s ( %s );\n",
+        push @indices, sprintf "CREATE INDEX %s IF NOT EXISTS %s ON %s ( %s );\n",
           $index_type,
           $index_name,
           $table,

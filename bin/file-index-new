@@ -48,7 +48,7 @@ my $dbh=DBI->connect(sprintf("dbi:SQLite:dbname=%s", $dbfile), undef, undef, { A
 
 for my $sql (@sql) {
   print $sql;
-  $dbh->do($sql);
+  $dbh->do($sql) unless exists $ENV{FILE_INDEX_TESTMODE};
 }
 
 sub schema {
