@@ -11,7 +11,7 @@ use Fcntl ':mode';
 use Moo;
 
 with 'File::Index::Role::DBObject';
-with 'File::Index::PermissionSymbols';
+# with 'File::Index::PermissionSymbols';
 
 our @COLUMNS=qw{ id filename filepath mode mtime index_time };
 
@@ -124,7 +124,7 @@ do {
   for my $w (keys %$who) {
     for my $p (keys %$perm) {
       my $method=sprintf 'sub %s { my $self=shift; return($self->mode & S_I%s%s); }', sprintf("%s_%s", $w, $p), $who->{$w}, $perm->{$p};
-      printf STDERR "+ SUB: %s\n", $method;
+      # printf STDERR "+ SUB: %s\n", $method;
       eval $method; ## no critic
     }
   }
