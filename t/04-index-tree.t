@@ -85,8 +85,8 @@ sub test_entry {
       plan tests => 7;
       pass "${path}: found entry";
       my $stat=$path->stat;
-      is $entry->name, $path->basename, "correct file name";
-      is $entry->path, $path->parent, "correct file path";
+      is $entry->filename, $path->basename, "correct file name";
+      is $entry->filepath->realpath, $path->parent->realpath, "correct file path";
       is $entry->size, $stat->size, "correct file size";
       is $entry->mode, $stat->mode, "correct file mode";
       ok time - $entry->index_time < 5, "correct index time";

@@ -79,6 +79,7 @@ sub by_id {
   my $dbh=$self->dbh;
   my $select=$self->_select_by_id;
   my $result=$dbh->selectrow_hashref($select, {}, $id);
+  $result->{dbh}=$dbh;
   return File::Index::Entry->new_from_hash($result);
 }
 
@@ -88,6 +89,7 @@ sub by_path {
   my $dbh=$self->dbh;
   my $select=$self->_statement_cache->{get_entry_by_path_and_name};
   my $result=$dbh->selectrow_hashref($select, {}, $path->parent, $path->basename);
+  $result->{dbh}=$dbh;
   return File::Index::Entry->new_from_hash($result);
 }
 

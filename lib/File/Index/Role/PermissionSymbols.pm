@@ -524,7 +524,7 @@ our $RWX_LOOKUP=[
 
 has _rwx_lookup => (
   is => 'ro',
-  default => $RWX_LOOKUP,
+  default => sub {$RWX_LOOKUP},
 );
 
 1;
